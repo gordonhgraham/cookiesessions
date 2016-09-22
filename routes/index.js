@@ -1,82 +1,97 @@
 var express = require('express');
 var router = express.Router();
-var knex = require('../db/knex')
-var bcrypt = require('bcrypt')
+var knex = require(`../db/knex`);
+var bcrypt = require(`bcrypt`);
 
-/* GET home page. */
 router.get('/', function(req, res, next) {
-  res.render('signup', {
-    title: 'Express'
-  });
+  res.render('signup');
 });
 
-router.get('/public', function(req, res, next){
-  res.render('public')
-})
+router.get('/login', function(req, res, next) {
+  res.render('login');
+});
 
-router.get('/private', function(req, res, next){
-  if (!req.session.userInfo){
-    res.render('error', {message: 'Unauthorized. For users only.'})
+router.get('/private', function(req, res, next) {
+  if (req.session.userInfo) {
+    const userInfo = req.session.userInfo;
+    res.render(`private`, {
+      username: userInfo.user_name,
+      firstname: userInfo.first_name,
+      lastname: userInfo.last_name
+    });
   } else {
-    var userInfo = req.session.userInfo
-    res.render('private', {username: userInfo.user_name, firstname: userInfo.first_name, lastname: userInfo.last_name})
+    res.render(`error`, {
+      message: `Yah can't see dis!`
+    })
   }
-})
+});
 
-router.get('/admin', function(req, res, next){
-  if (!req.session.userInfo || !req.session.userInfo.is_admin){
-    res.render('error', {message: 'Unauthorized. For admin only.'})
+router.get('/public', function(req, res, next) {
+  res.render('public');
+});
+
+router.get('/admin', function(req, res, next) {
+  if (req.session.userInfo && req.session.userInfo.is_admin) {
+    res.render(`admin`);
   } else {
-    res.render('admin')
+    res.render(`error`, {
+      message: `Only de adminz!!`
+    })
   }
-})
+});
 
-router.get('/logout', function(req, res, next){
-  req.session = null;
-  res.redirect('/')
-})
-
-router.get('/login', function(req, res, next){
-  res.render('login')
-})
-
-router.post('/login', function(req, res, next){
-  knex('users').where('user_name', req.body.username).then(function(results){
-    let passwordMatch = bcrypt.compareSync(req.body.password, results[0].password)
-    if (passwordMatch) {
-      let userInfo = results[0]
-      delete userInfo.password
-      req.session.userInfo = userInfo
-      res.redirect('/private')
-    } else {
-      res.redirect('/')
-    }
-  })
-})
-
-router.post('/signup', function(req, res, next) {
-  knex('users').where('user_name', req.body.username).then(function(results) {
-    if (results.length >= 1) {
+router.post(`/signup`, (req, res, next) => {
+  knex(`users`).where(`user_name`, req.body.username).then(results => {
+    if (results.length > 0) {
       res.render('error', {
-        message: 'Username already taken.'
-      })
+        message: 'Username unavailable, try TurdSandwich'
+      });
     } else {
-    var hash = bcrypt.hashSync(req.body.password, 12)
-    console.log('hash: ', hash)
-    knex('users')
-      .returning('*')
-      .insert({
-        user_name: req.body.username,
-        first_name: req.body.firstname,
-        last_name: req.body.lastname,
-        password: hash,
-        is_admin: false
-      })
-      .then(function(results) {
-        res.send(results)
-      })
+      const user = req.body
+      const password = bcrypt.hashSync(req.body.password, 12);
+      knex(`users`).insert({
+          user_name: user.username,
+          first_name: user.firstname,
+          last_name: user.lastname,
+          password: password,
+          is_admin: false
+        }, `*`)
+        .then((results) => {
+          req.session.userInfo = results[0];
+          delete results.password;
+          console.log(results);
+          res.redirect(`/private`);
+        });
     }
   })
 })
+
+router.post(`/login`, (req, res, next) => {
+  knex(`users`).where(`user_name`, req.body.username)
+    .then((results) => {
+      if (results.length == 0) {
+        res.render(`error`, {
+          message: `Uzur name er passwerd iz wrong`
+        })
+      } else {
+        const user = results[0];
+        const passwordMatch = bcrypt.compareSync(req.body.password, user.password);
+        if (passwordMatch === true) {
+          delete user.password;
+          req.session.userInfo = user;
+          res.redirect(`private`)
+        } else {
+          res.render(`error`, {
+            message: `Uzur name er passwerd iz wrong`
+          })
+        }
+      }
+    })
+})
+
+router.get(`/logout`, (req, res, next) => {
+  req.session = null;
+  res.redirect(`/login`);
+});
 
 module.exports = router;
